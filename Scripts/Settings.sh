@@ -46,8 +46,8 @@ fi
 
 #科学插件设置
 if [[ $WRT_REPO == *"lede"* ]]; then
-	echo "CONFIG_PACKAGE_luci-app-openclash=y" >> ./.config
-	echo "CONFIG_PACKAGE_luci-app-passwall=y" >> ./.config
+	echo "CONFIG_PACKAGE_luci-app-openclash=n" >> ./.config
+	echo "CONFIG_PACKAGE_luci-app-passwall=n" >> ./.config
 	echo "CONFIG_PACKAGE_luci-app-ssr-plus=y" >> ./.config
 	echo "CONFIG_PACKAGE_luci-app-turboacc=y" >> ./.config
 else
