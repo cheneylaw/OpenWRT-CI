@@ -2,7 +2,7 @@
 name: OWRT-ONE
 
 #CI计划
-on:
+#on:
   #自动编译：每天早上4点
   #schedule:
     #- cron: 0 20 * * *
