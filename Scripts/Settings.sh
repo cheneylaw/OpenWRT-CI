@@ -31,6 +31,8 @@ fi
 echo "CONFIG_PACKAGE_luci-theme-$WRT_THEME=y" >> ./.config
 echo "CONFIG_PACKAGE_luci-app-$WRT_THEME-config=y" >> ./.config
 echo "CONFIG_PACKAGE_luci-app-ssr-plus=y" >> ./.config
+echo "CONFIG_PACKAGE_luci-i18n-ssr-plus-zh-cn=y" >> ./.config
+echo "CONFIG_PACKAGE_luci-i18n-base-zh-cn=y" >> ./.config
 echo "CONFIG_PACKAGE_luci-app-turboacc=y" >> ./.config
 #手动调整的插件
 if [ -n "$WRT_PACKAGE" ]; then
