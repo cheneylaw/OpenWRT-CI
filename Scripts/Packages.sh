@@ -56,6 +56,7 @@ UPDATE_PACKAGE "passwall2" "xiaorouji/openwrt-passwall2" "main" "pkg"
 #
 UPDATE_PACKAGE "luci-app-tailscale" "asvow/luci-app-tailscale" "main"
 UPDATE_PACKAGE "luci-app-lucky" "gdy666/luci-app-lucky" "main"
+UPDATE_PACKAGE "luci-app-zerotier" "zhengmz/luci-app-zerotier" "master"
 UPDATE_PACKAGE "luci-app-wrtbwmon" "brvphoenix/luci-app-wrtbwmon" "master"
 UPDATE_PACKAGE "wrtbwmon" "brvphoenix/wrtbwmon" "master"
 #UPDATE_PACKAGE "luci-app-bandix" "timsaya/luci-app-bandix" "main"
