@@ -68,3 +68,45 @@ if [[ "${WRT_TARGET^^}" == *"QUALCOMMAX"* ]]; then
 	#其他调整
 	echo "CONFIG_PACKAGE_kmod-usb-serial-qualcomm=y" >> ./.config
 fi
+## ===================== USB网卡热插拔重命名脚本 + LuCI条件显示端口卡片 =====================
+# 1、创建hotplug脚本：匹配MAC，把内核生成的ethX重命名为eth_usb
+HOTPLUG_SCRIPT="./package/base-files/files/etc/hotplug.d/iface/99-rename-usbnic"
+mkdir -p $(dirname $HOTPLUG_SCRIPT)
+cat > $HOTPLUG_SCRIPT <<'EOF'
+#!/bin/sh
+[ "$ACTION" != "add" ] && exit 0
+# 匹配你的USB网卡MAC
+TARGET_MAC="00:e0:4c:68:11:9b"
+CURR_MAC=$(cat /sys/class/net/$INTERFACE/address 2>/dev/null)
+if [ "$CURR_MAC" = "$TARGET_MAC" ]; then
+    # 把当前内核分配的名字重命名为 eth_usb
+    ip link set dev "$INTERFACE" down
+    ip link set dev "$INTERFACE" name eth_usb
+    ip link set dev eth_usb up
+fi
+EOF
+chmod +x $HOTPLUG_SCRIPT
+echo "hotplug rename script installed"
+
+# 2、修改LuCI首页模板：eth_usb存在才渲染USB‑LAN卡片，不存在完全不显示
+LUCI_INDEX_HTM=$(find ./feeds/luci/modules/luci-mod-admin-full/luasrc/view/admin_status/ -name "index.htm")
+if [ -f "$LUCI_INDEX_HTM" ]; then
+sed -i '/<div class="port-card">wan<\/div>/a\
+<% if luci.sys.net.devices["eth_usb"] then %>\
+<div class="port-card">USB‑LAN<br>1GbE">\
+    <div class="port-green"></div>\
+    <div>▲ <%=luci.sys.net.devices["eth_usb"].tx_bytes%></div>\
+    <div>▼ <%=luci.sys.net.devices["eth_usb"].rx_bytes%></div>\
+</div>\
+<% end %>' $LUCI_INDEX_HTM
+echo "patch luci index.htm conditional USB‑LAN done!"
+fi
+
+# 3、编译阶段预置br‑lan网桥包含eth_usb（允许不存在的接口，不会报错）
+CFG_GENERATE="./package/base-files/files/bin/config_generate"
+if [ -f "$CFG_GENERATE" ]; then
+# 在br‑lan ports列表追加 eth_usb
+sed -i '/list ports/s/$/ eth_usb/' $CFG_GENERATE
+echo "add eth_usb to br‑lan ports in config_generate"
+fi
+## =========================================================================================
