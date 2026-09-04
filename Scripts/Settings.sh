@@ -68,45 +68,66 @@ if [[ "${WRT_TARGET^^}" == *"QUALCOMMAX"* ]]; then
 	#其他调整
 	echo "CONFIG_PACKAGE_kmod-usb-serial-qualcomm=y" >> ./.config
 fi
-## ===================== USB网卡热插拔重命名脚本 + LuCI条件显示端口卡片 =====================
-# 1、创建hotplug脚本：匹配MAC，把内核生成的ethX重命名为eth_usb
-HOTPLUG_SCRIPT="./package/base-files/files/etc/hotplug.d/iface/99-rename-usbnic"
-mkdir -p $(dirname $HOTPLUG_SCRIPT)
-cat > $HOTPLUG_SCRIPT <<'EOF'
-#!/bin/sh
-[ "$ACTION" != "add" ] && exit 0
-# 匹配你的USB网卡MAC
-TARGET_MAC="00:e0:4c:68:11:9b"
-CURR_MAC=$(cat /sys/class/net/$INTERFACE/address 2>/dev/null)
-if [ "$CURR_MAC" = "$TARGET_MAC" ]; then
-    # 把当前内核分配的名字重命名为 eth_usb
-    ip link set dev "$INTERFACE" down
-    ip link set dev "$INTERFACE" name eth_usb
-    ip link set dev eth_usb up
-fi
+# ============ USB 网卡：每次开机自动显示到首页"端口状态" ============
+
+# 1) 启动脚本：打进固件，每次开机执行
+mkdir -p ./package/base-files/files/etc/init.d ./package/base-files/files/etc/rc.d
+cat > ./package/base-files/files/etc/init.d/usbnet <<'EOF'
+#!/bin/sh /etc/rc.common
+START=99
+
+boot() { start; }
+
+start() {
+	# 最多等 30 秒，让 USB 网卡完成枚举
+	local i=0
+	while [ $i -lt 30 ]; do
+		ls /sys/class/net/*/device/idVendor >/dev/null 2>&1 && break
+		sleep 1
+		i=$((i + 1))
+	done
+
+	local changed=0 devpath iface sec
+
+	# 遍历所有"挂在 USB 总线上的网卡"
+	for devpath in /sys/class/net/*/device/idVendor; do
+		[ -f "$devpath" ] || continue
+		iface="${devpath%/device/idVendor}"
+		iface="${iface##*/}"
+
+		# ① 写入 /etc/board.json（首页端口状态的数据来源）
+		if ! grep -q "\"$iface\"" /etc/board.json; then
+			. /usr/share/libubox/jshn.sh
+			json_load "$(cat /etc/board.json)"
+			json_select network
+			json_select lan
+			json_select ports 2>/dev/null || json_add_array "ports"
+			json_add_string "" "$iface"
+			json_dump > /tmp/board.json.new
+			mv /tmp/board.json.new /etc/board.json
+			changed=1
+		fi
+
+		# ② 加入 br-lan（让卡片带上 lan 区域颜色、正常转发）
+		sec=$(uci show network 2>/dev/null | sed -n "s/^network\.\([^.]*\)\.name='br-lan'$/\1/p" | head -1)
+		if [ -n "$sec" ]; then
+			uci -q get "network.$sec.ports" | tr ' ' '\n' | grep -qx "$iface" || {
+				uci -q add_list "network.$sec.ports=$iface"
+				changed=1
+			}
+		fi
+	done
+
+	# 只有改动过才提交并重载网络，避免每次开机多余操作
+	if [ "$changed" = "1" ]; then
+		uci commit network
+		/etc/init.d/network reload
+	fi
+	return 0
+}
 EOF
-chmod +x $HOTPLUG_SCRIPT
-echo "hotplug rename script installed"
+chmod +x ./package/base-files/files/etc/init.d/usbnet
 
-# 2、修改LuCI首页模板：eth_usb存在才渲染USB‑LAN卡片，不存在完全不显示
-LUCI_INDEX_HTM=$(find ./feeds/luci/modules/luci-mod-admin-full/luasrc/view/admin_status/ -name "index.htm")
-if [ -f "$LUCI_INDEX_HTM" ]; then
-sed -i '/<div class="port-card">wan<\/div>/a\
-<% if luci.sys.net.devices["eth_usb"] then %>\
-<div class="port-card">USB‑LAN<br>1GbE">\
-    <div class="port-green"></div>\
-    <div>▲ <%=luci.sys.net.devices["eth_usb"].tx_bytes%></div>\
-    <div>▼ <%=luci.sys.net.devices["eth_usb"].rx_bytes%></div>\
-</div>\
-<% end %>' $LUCI_INDEX_HTM
-echo "patch luci index.htm conditional USB‑LAN done!"
-fi
-
-# 3、编译阶段预置br‑lan网桥包含eth_usb（允许不存在的接口，不会报错）
-CFG_GENERATE="./package/base-files/files/bin/config_generate"
-if [ -f "$CFG_GENERATE" ]; then
-# 在br‑lan ports列表追加 eth_usb
-sed -i '/list ports/s/$/ eth_usb/' $CFG_GENERATE
-echo "add eth_usb to br‑lan ports in config_generate"
-fi
+# 2) 建立开机自启软链接（否则脚本打进固件也不会自动运行）
+ln -sf ../init.d/usbnet ./package/base-files/files/etc/rc.d/S99usbnet
 ## =========================================================================================
